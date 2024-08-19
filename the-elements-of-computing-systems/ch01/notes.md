@@ -38,3 +38,21 @@ Simplifying boolean expressions is how we make them easier to grok and optimize 
 These are the 'embodiment' of boolean operators in the real world, where binary inputs are turned into binary output 
 according to a truth table.
 Gates can be composed to form 'composite' gates or arbitrarily complex logic.
+
+## Hardware Contruction
+
+Thought experiment to build an Xor gate out of and,not,or gates in the garage.
+
+## Hardware Description Language
+
+HDL is a formalism to describe the makeup of a chip with a language. Once the designer has made one, it can be fed
+to software that generates a simulation of the chip described and can run inputs on it to check that it matches the
+expected outputs and measure the chip's power/performance characteristics.
+
+A HDL program has two sections: header and parts. The former describes the overall interface of the chip it describes. 
+The latter is a list of all the gates used and how they are interconnected.
+
+You can then write a test script, which simulates whatever input you provide and generates a file with the outputs
+given by the system designed.
+
+
