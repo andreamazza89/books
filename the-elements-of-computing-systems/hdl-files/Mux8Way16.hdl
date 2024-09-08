@@ -1,0 +1,152 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/1/Mux8Way16.hdl
+/**
+ * 8-way 16-bit multiplexor:
+ * out = a if sel = 000
+ *       b if sel = 001
+ *       c if sel = 010
+ *       d if sel = 011
+ *       e if sel = 100
+ *       f if sel = 101
+ *       g if sel = 110
+ *       h if sel = 111
+ */
+CHIP Mux8Way16 {
+    IN a[16], b[16], c[16], d[16],
+       e[16], f[16], g[16], h[16],
+       sel[3];
+    OUT out[16];
+
+    PARTS:
+    Mux(     a=a[0 ]  ,    b=b[0 ]  , sel=sel[0] ,   out=muxab0 );
+    Mux(     a=c[0 ]  ,    b=d[0 ]  , sel=sel[0] ,   out=muxcd0 );
+    Mux(     a=e[0 ]  ,    b=f[0 ]  , sel=sel[0] ,   out=muxef0 );
+    Mux(     a=g[0 ]  ,    b=h[0 ]  , sel=sel[0] ,   out=muxgh0 );
+    Mux(  a=muxab0  , b=  muxcd0  ,   sel=sel[1] , out=muxabcd0 );
+    Mux(  a=muxef0  , b=  muxgh0  ,   sel=sel[1] , out=muxefhg0 );
+    Mux(a=muxabcd0  , b=muxefhg0  ,   sel=sel[2] ,    out=out[0 ]);
+
+    Mux(     a=a[1 ]  ,    b=b[1 ]  , sel=sel[0] ,   out=muxab1 );
+    Mux(     a=c[1 ]  ,    b=d[1 ]  , sel=sel[0] ,   out=muxcd1 );
+    Mux(     a=e[1 ]  ,    b=f[1 ]  , sel=sel[0] ,   out=muxef1 );
+    Mux(     a=g[1 ]  ,    b=h[1 ]  , sel=sel[0] ,   out=muxgh1 );
+    Mux(  a=muxab1  , b=  muxcd1  ,   sel=sel[1] , out=muxabcd1 );
+    Mux(  a=muxef1  , b=  muxgh1  ,   sel=sel[1] , out=muxefhg1 );
+    Mux(a=muxabcd1  , b=muxefhg1  ,   sel=sel[2] ,    out=out[1 ]);
+
+    Mux(     a=a[2 ]  ,    b=b[2 ]  , sel=sel[0] ,   out=muxab2 );
+    Mux(     a=c[2 ]  ,    b=d[2 ]  , sel=sel[0] ,   out=muxcd2 );
+    Mux(     a=e[2 ]  ,    b=f[2 ]  , sel=sel[0] ,   out=muxef2 );
+    Mux(     a=g[2 ]  ,    b=h[2 ]  , sel=sel[0] ,   out=muxgh2 );
+    Mux(  a=muxab2  , b=  muxcd2  ,   sel=sel[1] , out=muxabcd2 );
+    Mux(  a=muxef2  , b=  muxgh2  ,   sel=sel[1] , out=muxefhg2 );
+    Mux(a=muxabcd2  , b=muxefhg2  ,   sel=sel[2] ,    out=out[2 ]);
+
+    Mux(     a=a[3 ]  ,    b=b[3 ]  , sel=sel[0] ,   out=muxab3 );
+    Mux(     a=c[3 ]  ,    b=d[3 ]  , sel=sel[0] ,   out=muxcd3 );
+    Mux(     a=e[3 ]  ,    b=f[3 ]  , sel=sel[0] ,   out=muxef3 );
+    Mux(     a=g[3 ]  ,    b=h[3 ]  , sel=sel[0] ,   out=muxgh3 );
+    Mux(  a=muxab3  , b=  muxcd3  ,   sel=sel[1] , out=muxabcd3 );
+    Mux(  a=muxef3  , b=  muxgh3  ,   sel=sel[1] , out=muxefhg3 );
+    Mux(a=muxabcd3  , b=muxefhg3  ,   sel=sel[2] ,    out=out[3 ]);
+
+    Mux(     a=a[4 ]  ,    b=b[4 ]  , sel=sel[0] ,   out=muxab4 );
+    Mux(     a=c[4 ]  ,    b=d[4 ]  , sel=sel[0] ,   out=muxcd4 );
+    Mux(     a=e[4 ]  ,    b=f[4 ]  , sel=sel[0] ,   out=muxef4 );
+    Mux(     a=g[4 ]  ,    b=h[4 ]  , sel=sel[0] ,   out=muxgh4 );
+    Mux(  a=muxab4  , b=  muxcd4  ,   sel=sel[1] , out=muxabcd4 );
+    Mux(  a=muxef4  , b=  muxgh4  ,   sel=sel[1] , out=muxefhg4 );
+    Mux(a=muxabcd4  , b=muxefhg4  ,   sel=sel[2] ,    out=out[4 ]);
+
+    Mux(     a=a[5 ]  ,    b=b[5 ]  , sel=sel[0] ,   out=muxab5 );
+    Mux(     a=c[5 ]  ,    b=d[5 ]  , sel=sel[0] ,   out=muxcd5 );
+    Mux(     a=e[5 ]  ,    b=f[5 ]  , sel=sel[0] ,   out=muxef5 );
+    Mux(     a=g[5 ]  ,    b=h[5 ]  , sel=sel[0] ,   out=muxgh5 );
+    Mux(  a=muxab5  , b=  muxcd5  ,   sel=sel[1] , out=muxabcd5 );
+    Mux(  a=muxef5  , b=  muxgh5  ,   sel=sel[1] , out=muxefhg5 );
+    Mux(a=muxabcd5  , b=muxefhg5  ,   sel=sel[2] ,    out=out[5 ]);
+
+    Mux(     a=a[6 ]  ,    b=b[6 ]  , sel=sel[0] ,   out=muxab6 );
+    Mux(     a=c[6 ]  ,    b=d[6 ]  , sel=sel[0] ,   out=muxcd6 );
+    Mux(     a=e[6 ]  ,    b=f[6 ]  , sel=sel[0] ,   out=muxef6 );
+    Mux(     a=g[6 ]  ,    b=h[6 ]  , sel=sel[0] ,   out=muxgh6 );
+    Mux(  a=muxab6  , b=  muxcd6  ,   sel=sel[1] , out=muxabcd6 );
+    Mux(  a=muxef6  , b=  muxgh6  ,   sel=sel[1] , out=muxefhg6 );
+    Mux(a=muxabcd6  , b=muxefhg6  ,   sel=sel[2] ,    out=out[6 ]);
+
+    Mux(     a=a[7 ]  ,    b=b[7 ]  , sel=sel[0] ,   out=muxab7 );
+    Mux(     a=c[7 ]  ,    b=d[7 ]  , sel=sel[0] ,   out=muxcd7 );
+    Mux(     a=e[7 ]  ,    b=f[7 ]  , sel=sel[0] ,   out=muxef7 );
+    Mux(     a=g[7 ]  ,    b=h[7 ]  , sel=sel[0] ,   out=muxgh7 );
+    Mux(  a=muxab7  , b=  muxcd7  ,   sel=sel[1] , out=muxabcd7 );
+    Mux(  a=muxef7  , b=  muxgh7  ,   sel=sel[1] , out=muxefhg7 );
+    Mux(a=muxabcd7  , b=muxefhg7  ,   sel=sel[2] ,    out=out[7 ]);
+
+    Mux(     a=a[8 ]  ,    b=b[8 ]  , sel=sel[0] ,   out=muxab8 );
+    Mux(     a=c[8 ]  ,    b=d[8 ]  , sel=sel[0] ,   out=muxcd8 );
+    Mux(     a=e[8 ]  ,    b=f[8 ]  , sel=sel[0] ,   out=muxef8 );
+    Mux(     a=g[8 ]  ,    b=h[8 ]  , sel=sel[0] ,   out=muxgh8 );
+    Mux(  a=muxab8  , b=  muxcd8  ,   sel=sel[1] , out=muxabcd8 );
+    Mux(  a=muxef8  , b=  muxgh8  ,   sel=sel[1] , out=muxefhg8 );
+    Mux(a=muxabcd8  , b=muxefhg8  ,   sel=sel[2] ,    out=out[8 ]);
+
+    Mux(     a=a[9 ]  ,    b=b[9 ]  , sel=sel[0] ,   out=muxab9 );
+    Mux(     a=c[9 ]  ,    b=d[9 ]  , sel=sel[0] ,   out=muxcd9 );
+    Mux(     a=e[9 ]  ,    b=f[9 ]  , sel=sel[0] ,   out=muxef9 );
+    Mux(     a=g[9 ]  ,    b=h[9 ]  , sel=sel[0] ,   out=muxgh9 );
+    Mux(  a=muxab9  , b=  muxcd9  ,   sel=sel[1] , out=muxabcd9 );
+    Mux(  a=muxef9  , b=  muxgh9  ,   sel=sel[1] , out=muxefhg9 );
+    Mux(a=muxabcd9  , b=muxefhg9  ,   sel=sel[2] ,    out=out[9 ]);
+
+    Mux(     a=a[10 ]  ,    b=b[10 ]  , sel=sel[0] ,   out=muxab10 );
+    Mux(     a=c[10 ]  ,    b=d[10 ]  , sel=sel[0] ,   out=muxcd10 );
+    Mux(     a=e[10 ]  ,    b=f[10 ]  , sel=sel[0] ,   out=muxef10 );
+    Mux(     a=g[10 ]  ,    b=h[10 ]  , sel=sel[0] ,   out=muxgh10 );
+    Mux(  a=muxab10  , b=  muxcd10  ,   sel=sel[1] , out=muxabcd10 );
+    Mux(  a=muxef10  , b=  muxgh10  ,   sel=sel[1] , out=muxefhg10 );
+    Mux(a=muxabcd10  , b=muxefhg10  ,   sel=sel[2] ,    out=out[10 ]);
+
+    Mux(     a=a[11 ]  ,    b=b[11 ]  , sel=sel[0] ,   out=muxab11 );
+    Mux(     a=c[11 ]  ,    b=d[11 ]  , sel=sel[0] ,   out=muxcd11 );
+    Mux(     a=e[11 ]  ,    b=f[11 ]  , sel=sel[0] ,   out=muxef11 );
+    Mux(     a=g[11 ]  ,    b=h[11 ]  , sel=sel[0] ,   out=muxgh11 );
+    Mux(  a=muxab11  , b=  muxcd11  ,   sel=sel[1] , out=muxabcd11 );
+    Mux(  a=muxef11  , b=  muxgh11  ,   sel=sel[1] , out=muxefhg11 );
+    Mux(a=muxabcd11  , b=muxefhg11  ,   sel=sel[2] ,    out=out[11 ]);
+
+    Mux(     a=a[12 ]  ,    b=b[12 ]  , sel=sel[0] ,   out=muxab12 );
+    Mux(     a=c[12 ]  ,    b=d[12 ]  , sel=sel[0] ,   out=muxcd12 );
+    Mux(     a=e[12 ]  ,    b=f[12 ]  , sel=sel[0] ,   out=muxef12 );
+    Mux(     a=g[12 ]  ,    b=h[12 ]  , sel=sel[0] ,   out=muxgh12 );
+    Mux(  a=muxab12  , b=  muxcd12  ,   sel=sel[1] , out=muxabcd12 );
+    Mux(  a=muxef12  , b=  muxgh12  ,   sel=sel[1] , out=muxefhg12 );
+    Mux(a=muxabcd12  , b=muxefhg12  ,   sel=sel[2] ,    out=out[12 ]);
+
+    Mux(     a=a[13 ]  ,    b=b[13 ]  , sel=sel[0] ,   out=muxab13 );
+    Mux(     a=c[13 ]  ,    b=d[13 ]  , sel=sel[0] ,   out=muxcd13 );
+    Mux(     a=e[13 ]  ,    b=f[13 ]  , sel=sel[0] ,   out=muxef13 );
+    Mux(     a=g[13 ]  ,    b=h[13 ]  , sel=sel[0] ,   out=muxgh13 );
+    Mux(  a=muxab13  , b=  muxcd13  ,   sel=sel[1] , out=muxabcd13 );
+    Mux(  a=muxef13  , b=  muxgh13  ,   sel=sel[1] , out=muxefhg13 );
+    Mux(a=muxabcd13  , b=muxefhg13  ,   sel=sel[2] ,    out=out[13 ]);
+
+    Mux(     a=a[14 ]  ,    b=b[14 ]  , sel=sel[0] ,   out=muxab14 );
+    Mux(     a=c[14 ]  ,    b=d[14 ]  , sel=sel[0] ,   out=muxcd14 );
+    Mux(     a=e[14 ]  ,    b=f[14 ]  , sel=sel[0] ,   out=muxef14 );
+    Mux(     a=g[14 ]  ,    b=h[14 ]  , sel=sel[0] ,   out=muxgh14 );
+    Mux(  a=muxab14  , b=  muxcd14  ,   sel=sel[1] , out=muxabcd14 );
+    Mux(  a=muxef14  , b=  muxgh14  ,   sel=sel[1] , out=muxefhg14 );
+    Mux(a=muxabcd14  , b=muxefhg14  ,   sel=sel[2] ,    out=out[14 ]);
+
+    Mux(     a=a[15 ]  ,    b=b[15 ]  , sel=sel[0] ,   out=muxab15 );
+    Mux(     a=c[15 ]  ,    b=d[15 ]  , sel=sel[0] ,   out=muxcd15 );
+    Mux(     a=e[15 ]  ,    b=f[15 ]  , sel=sel[0] ,   out=muxef15 );
+    Mux(     a=g[15 ]  ,    b=h[15 ]  , sel=sel[0] ,   out=muxgh15 );
+    Mux(  a=muxab15  , b=  muxcd15  ,   sel=sel[1] , out=muxabcd15 );
+    Mux(  a=muxef15  , b=  muxgh15  ,   sel=sel[1] , out=muxefhg15 );
+    Mux(a=muxabcd15  , b=muxefhg15  ,   sel=sel[2] ,    out=out[15 ]);
+}
+
+
