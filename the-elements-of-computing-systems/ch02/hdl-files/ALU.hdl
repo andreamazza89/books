@@ -27,19 +27,52 @@
 // if (no == 1) sets out = !out   // bitwise not
 
 CHIP ALU {
-    IN  
-        x[16], y[16],  // 16-bit inputs        
+    IN
+        x[16], y[16],  // 16-bit inputs
         zx, // zero the x input?
         nx, // negate the x input?
         zy, // zero the y input?
         ny, // negate the y input?
         f,  // compute (out = x + y) or (out = x & y)?
         no; // negate the out output?
-    OUT 
+    OUT
         out[16], // 16-bit output
         zr,      // if (out == 0) equals 1, else 0
         ng;      // if (out < 0)  equals 1, else 0
 
     PARTS:
-    //// Replace this comment with your code.
+
+    // ZX
+    Mux16(a=x , b=false , sel=zx , out=xStep1);
+    // ZY
+    Mux16(a=y , b=false , sel=zy , out=yStep1);
+
+    // Wondering if the order of Zx and Nx matters and if so what it should be
+    // It must matter, cause if you first zero the input and then negate it, then you get all ones,
+    // whereas if you negate it and then zero it you get all zeros.
+    // Looking at the table in the book showing all operations, I think the third row only works if
+    // zeroing comes first
+
+    // NX
+    Not16(in=xStep1, out=xNot);
+    Mux16(a=xStep1, b=xNot, sel=nx, out=xStep2);
+
+    // NY
+    Not16(in=yStep1, out=yNot);
+    Mux16(a=yStep1, b=yNot, sel=ny, out=yStep2);
+
+    // F
+    Add16(a = xStep2, b = yStep2, out = fSum);
+    And16(a= xStep2, b= yStep2, out= fAnd);
+    Mux16(a= fAnd , b= fSum, sel= f, out=step3);
+
+    // NO
+    Not16(in=step3 , out=notStep3);
+    Mux16(a=step3 , b=notStep3, sel=no, out[0..7]=outForZr1, out[8..15]=outForZr2, out[15]=ng, out=out);
+
+   // ZR
+   Or8Way(in=outForZr1, out=zrL);
+   Or8Way(in=outForZr2, out=zrR);
+   Or(a=zrL , b=zrR , out=zrAlmost);
+   Not(in=zrAlmost, out=zr);
 }

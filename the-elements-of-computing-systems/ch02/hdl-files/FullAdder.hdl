@@ -15,6 +15,4 @@ CHIP FullAdder {
     HalfAdder(a=a , b=innerSum , sum=sum , carry=carryB);
     Or(a=carryA , b=carryB , out=carry );
 
-
-    //// Replace this comment with your code.
 }

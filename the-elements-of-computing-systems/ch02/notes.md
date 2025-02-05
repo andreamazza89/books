@@ -8,7 +8,7 @@ all operations can be built off of addition
 
 ## Addition
 
-Two binary numbers can be added bitwise right to lefr, same algorithm as the one learned in elementary school.
+Two binary numbers can be added bitwise right to left, same algorithm as the one learned in elementary school.
 
 ## Signed binary numbers
 
@@ -16,7 +16,7 @@ Talks about two's complement, which has a number of great properties, including:
 
 - same hardware can be used to represent/manipulate signed and unsigned integers
 - negating a number is a simple operation
-- subtraction is a just addition
+- subtraction is done with addition
 
 ## Specification
 
@@ -43,5 +43,4 @@ A couple of decisions made by Hack with regards to the ALU:
 
 - only performs integer arithmetic
 - supports 18 arithmetic-logical functions
-
 
