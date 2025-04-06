@@ -1,73 +1,69 @@
 (CHECK)
+// init the screen index
+  @8192
+  D=A
+  @SCREEN
+  D=D+A
+  @left_to_paint
+  M=D
+
   @KBD
   D=M
+
+// initialise for filling if any key is pressed
   @INIT_FILL
   D;JGT
+
+// initialise for clearning if no key is pressed
   @INIT_CLEAR
   D;JEQ
-  @CHECK
-  0;JMP
-
-// TODO - just do the same looping, but use a variable for what we want all pixel blocks to be
 
 (INIT_CLEAR)
-  @8192
-  D=A
-  @left_to_clear
-  M=D
-  @CLEAR
-  0;JMP
-
-(CLEAR)
-  // whiten
-  @left_to_clear
+  @colour
   D=M
-  @SCREEN
-  D=D+A
-  A=D
-  M=0
-
-  // decrease the left_to_clear
-  @left_to_clear
-  M=M-1
-
-  // stop if finished
-  @left_to_clear
-  D=M
+// nothing to do if already white
   @CHECK
-  D;JLT
+  D;JEQ
 
-  @CLEAR
+// else set colour to 0 and go
+  @colour
+  M=0
+  @PAINT
   0;JMP
-  
 
 (INIT_FILL)
-  @8192
-  D=A
-  @left_to_fill
-  M=D
-  @FILL
-  0;JMP
-
-(FILL)
-  // blacken the block
-  @left_to_fill
+  @colour
   D=M
-  @SCREEN
-  D=D+A
-  A=D
-  M=-1
-
-  // decrease the left_to_fill
-  @left_to_fill
-  M=M-1
-
-  // stop if finished
-  @left_to_fill
-  D=M
+// nothing to do if already white
   @CHECK
   D;JLT
 
-  @FILL
+// else set colour to 1 and go
+  @colour
+  M=-1
+  @PAINT
+  0;JMP
+
+(PAINT)
+  // paint the current block
+  @colour
+  D=M
+  @left_to_paint
+  A=M
+  M=D
+
+  // decrease the left_to_paint
+  @left_to_paint
+  M=M-1
+
+  // stop if finished
+  @left_to_paint
+  D=M
+  @SCREEN
+  D=D-A
+  @CHECK
+  D;JLT
+
+  @PAINT
   0;JMP
   
