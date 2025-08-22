@@ -1,0 +1,127 @@
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M?
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS:
+    And(a=instruction[15], b=instruction[3], out=writeM);
+
+    //////////// ALU /////////////
+    Mux16(
+      a=aRegisterOut,
+      b=inM,
+      sel=instruction[12],
+      out=aOrMOutput
+    );
+    ALU(
+      x=dRegisterOut,
+      y=aOrMOutput,
+      zx=instruction[11],
+      nx=instruction[10],
+      zy=instruction[9],
+      ny=instruction[8],
+      f=instruction[7],
+      no=instruction[6],
+      out=aluOut,
+      out=outM,
+      zr=zrOut,
+      ng=ngOut
+    );
+    //////////// ALU /////////////
+
+
+    //////////// A Register /////////////
+    Not(
+      in=instruction[15],
+      out=isAInstruction
+    );
+    Or(
+      a=isAInstruction,
+      b=instruction[5], // looking at dest
+      out=shouldLoadA
+    );
+    Mux16(
+      a=aluOut,
+      b=instruction,
+      sel=isAInstruction,
+      out=aRegisterNextValue
+    );
+    Register(
+      in=aRegisterNextValue,
+      load=shouldLoadA,
+      out=aRegisterOut,
+      out[0..14]=addressM
+    );
+    //////////// A Register /////////////
+
+    //////////// D Register /////////////
+    And(
+      a=instruction[15],
+      b=instruction[4], // looking at dest
+      out=shouldLoadD
+    );
+    DRegister(
+      in=aluOut,
+      load=shouldLoadD,
+      out=dRegisterOut
+    );
+    //////////// D Register /////////////
+
+    //////////// Jump /////////////
+    And(
+      a=instruction[2],
+      b=ngOut,
+      out=shouldJumpCauseOutputIsNegative
+    );
+    And(
+      a=instruction[1],
+      b=zrOut,
+      out=shouldJumpCauseOutputIsZero
+    );
+    Not(in=zrOut, out=outputIsNotZero);
+    Not(in=ngOut, out=outputIsNotNegative);
+    And(
+      a=outputIsNotZero,
+      b=outputIsNotNegative,
+      out=outputIsPositive
+    );
+    And(
+      a=instruction[0],
+      b=outputIsPositive,
+      out=shouldJumpCauseOutputIsPositive
+    );
+    Or(
+      a=shouldJumpCauseOutputIsNegative,
+      b=shouldJumpCauseOutputIsZero,
+      out=shouldJumpTemp
+    );
+    Or(
+      a=shouldJumpTemp,
+      b=shouldJumpCauseOutputIsPositive,
+      out=shouldJustCauseInstructionSaidSo
+    );
+    And(
+      a=instruction[15],
+      b=shouldJustCauseInstructionSaidSo,
+      out=shouldJump
+    );
+    Not(in=shouldJump, out=shouldNotJump );
+    //////////// Jump /////////////
+
+    PC(
+      in=aRegisterOut,
+      load=shouldJump,
+      inc=shouldNotJump,
+      reset=reset,
+      out[0..14]=pc
+    );
+
+}
