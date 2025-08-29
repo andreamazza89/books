@@ -1,11 +1,14 @@
 use nom::branch::alt;
 use nom::bytes::complete::tag;
+use nom::character::anychar;
 use nom::character::complete::{alpha1, alphanumeric1, digit1, space0};
 use nom::combinator::map_res;
 use nom::error::Error;
 use nom::error::ErrorKind::Tag;
+use nom::multi::many1;
 use nom::sequence::{delimited, preceded, terminated};
 use nom::{Finish, IResult, Parser};
+use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 
 fn main() {
@@ -16,16 +19,30 @@ fn main() {
 // TODO - make the error better typed? Well, first actually fail if the input is not valid assembly
 fn do_it(assembly: &str) -> Result<String, String> {
     let mut env: Environment = Environment {
+        current_instruction_address: 0,
         inner: BTreeMap::default(),
+        next_variable_address: 16,
     };
 
-    Ok(assembly
+    let parsed_lines: Result<Vec<Option<String>>, _> = assembly
         .lines()
-        .filter_map(|raw_line| {
-            parse(raw_line, &mut env).map(|inst| inst.to_binary_instruction(&env))
+        .map(|raw_line| {
+            parse_line(raw_line).map(|(_, line)| {
+                env.process_line(&line);
+                line.to_binary_instruction(&env)
+            })
         })
-        .collect::<Vec<String>>()
-        .join(""))
+        .collect();
+
+    let r: Result<String, _> = parsed_lines.map(|instructions| {
+        instructions
+            .into_iter()
+            .flatten()
+            .collect::<Vec<String>>()
+            .join("")
+    });
+
+    r.map_err(|_| "woops".to_string())
 }
 
 enum Line {
@@ -34,20 +51,33 @@ enum Line {
     Label(String),
 }
 
+impl Line {
+    fn to_binary_instruction(&self, env: &Environment) -> Option<String> {
+        match self {
+            Line::Instruction(instruction) => Some(instruction.to_binary_instruction(env)),
+
+            Line::Comment => None,
+            Line::Label(_) => None,
+        }
+    }
+}
+
 enum Instruction {
     SetTheARegister(Value),
     Compute(String),
 }
 
 impl Instruction {
-    fn to_binary_instruction(self, env: &Environment) -> String {
+    fn to_binary_instruction(&self, env: &Environment) -> String {
         match self {
             Instruction::SetTheARegister(Value::Literal(int)) => format!("{:016b}", int),
             Instruction::SetTheARegister(Value::Variable(variable)) => {
                 // TODO - would be better to return an Err instead of panicking
-                env.get(&variable).expect("program is invalid if variable is not present at this point").clone()
+                env.get(&variable)
+                    .expect("program is invalid if variable is not present at this point")
+                    .clone()
             }
-            Instruction::Compute(c) => c,
+            Instruction::Compute(c) => c.clone(),
         }
     }
 }
@@ -57,18 +87,46 @@ enum Value {
     Variable(String),
 }
 
+#[derive(Debug)]
 struct Environment {
-    inner: BTreeMap<String, String>,
+    current_instruction_address: u16,
+    inner: BTreeMap<String, u16>,
+    next_variable_address: u16,
 }
 
 impl Environment {
     // TODO - I think we should disallow overwriting a variable.
-    fn set(&mut self, entry: (String, String)) -> () {
+    fn set(&mut self, entry: (String, u16)) -> () {
         self.inner.insert(entry.0, entry.1);
     }
 
-    fn get(&self, key: &str) -> Option<&String> {
-        self.inner.get(key)
+    fn get(&self, key: &str) -> Option<String> {
+        self.inner.get(key).map(|val| format!("{:016b}", val))
+    }
+
+    fn process_line(&mut self, line: &Line) -> () {
+        match line {
+            Line::Instruction(instruction) => {
+                self.current_instruction_address += 1;
+
+                match instruction {
+                    Instruction::SetTheARegister(Value::Variable(variable)) => {
+                        match self.inner.entry(variable.clone()) {
+                            Entry::Vacant(vacant) => {
+                                vacant.insert(self.next_variable_address);
+                                self.next_variable_address += 1;
+                            }
+                            Entry::Occupied(_) => {}
+                        };
+                    }
+                    _ => {}
+                }
+            }
+
+            Line::Label(label) => self.set((label.clone(), self.current_instruction_address)),
+
+            Line::Comment => {}
+        }
     }
 }
 
@@ -113,29 +171,69 @@ fn parse_dest(raw_line: &str) -> IResult<&str, String> {
     let (raw_line, dest) = terminated(alpha1, tag("=")).parse(raw_line)?;
 
     // TODO - what's the right way to do this? If this is it, then Tag is probably wrong
-    // ALTERNATIVELY - maybe there's a way to specify what characters are to be parsed, so
     let err = nom::Err::Error(Error::new(raw_line, Tag));
 
     // mmm maybe there's a clever way to do this whereby I just parse a list of characters and
     // flip the appropriate bit if the character is present? That way I'd allow any permutation and
     // not have to 'spell' all of them out in the match statement
     match dest {
+        "M" => Ok((raw_line, "001".to_string())),
         "D" => Ok((raw_line, "010".to_string())),
+        "MD" => Ok((raw_line, "011".to_string())),
+        "A" => Ok((raw_line, "100".to_string())),
+        "AM" => Ok((raw_line, "101".to_string())),
+        "AD" => Ok((raw_line, "110".to_string())),
         "AMD" => Ok((raw_line, "111".to_string())),
         _ => Err(err),
     }
 }
 
 fn parse_comp(raw_line: &str) -> IResult<&str, String> {
-    let (raw_line, comp) = alphanumeric1(raw_line)?;
+    let (raw_line, comp) = many1(alt((
+        alphanumeric1,
+        tag("+"),
+        tag("-"),
+        tag("!"),
+        tag("&"),
+        tag("|"),
+    )))
+    .parse(raw_line)?;
 
     // TODO - what's the right way to do this? If this is it, then Tag is probably wrong
-    // ALTERNATIVELY - maybe there's a way to specify what characters are to be parsed, so
     let err = nom::Err::Error(Error::new(raw_line, Tag));
 
-    match comp {
+    // mmm here as well the clever way is probably to figure out if there's a recipe, perhaps
+    // you start with a sequence of bits, and then if you encounter a specific character you flip
+    // a certain bit. For example, if you see `M`, then just change the first bit to 1
+    match comp.concat().as_str() {
         "0" => Ok((raw_line, "0101010".to_string())),
         "1" => Ok((raw_line, "0111111".to_string())),
+        "-1" => Ok((raw_line, "0111010".to_string())),
+        "D" => Ok((raw_line, "0001100".to_string())),
+        "A" => Ok((raw_line, "0110000".to_string())),
+        "M" => Ok((raw_line, "1110000".to_string())),
+        "!D" => Ok((raw_line, "0001101".to_string())),
+        "!A" => Ok((raw_line, "0110001".to_string())),
+        "!M" => Ok((raw_line, "0110001".to_string())),
+        "-D" => Ok((raw_line, "0001111".to_string())),
+        "-A" => Ok((raw_line, "0110011".to_string())),
+        "-M" => Ok((raw_line, "1110011".to_string())),
+        "D+1" => Ok((raw_line, "0011111".to_string())),
+        "A+1" => Ok((raw_line, "0110111".to_string())),
+        "M+1" => Ok((raw_line, "1110111".to_string())),
+        "D-1" => Ok((raw_line, "0001110".to_string())),
+        "A-1" => Ok((raw_line, "0110010".to_string())),
+        "M-1" => Ok((raw_line, "1110010".to_string())),
+        "D+A" => Ok((raw_line, "0000010".to_string())),
+        "D+M" => Ok((raw_line, "1000010".to_string())),
+        "D-A" => Ok((raw_line, "0010011".to_string())),
+        "D-M" => Ok((raw_line, "1010011".to_string())),
+        "A-D" => Ok((raw_line, "0000111".to_string())),
+        "M-D" => Ok((raw_line, "1000111".to_string())),
+        "D&A" => Ok((raw_line, "0000000".to_string())),
+        "D&M" => Ok((raw_line, "1000000".to_string())),
+        "D|A" => Ok((raw_line, "0010101".to_string())),
+        "D|M" => Ok((raw_line, "1010101".to_string())),
         _ => Err(err),
     }
 }
@@ -144,7 +242,6 @@ fn parse_jump(raw_line: &str) -> IResult<&str, String> {
     let (raw_line, jump) = preceded(tag(";"), alpha1).parse(raw_line)?;
 
     // TODO - what's the right way to do this? If this is it, then Tag is probably wrong
-    // ALTERNATIVELY - maybe there's a way to specify what characters are to be parsed, so
     let err = nom::Err::Error(Error::new(raw_line, Tag));
 
     match jump {
@@ -160,7 +257,6 @@ fn parse_jump(raw_line: &str) -> IResult<&str, String> {
 }
 
 fn parse_c_instruction(raw_line: &str) -> IResult<&str, Line> {
-    println!("parse_c_instruction {}", raw_line);
 
     let (raw_line, dest) = parse_dest(raw_line).unwrap_or((raw_line, "000".to_string()));
     let (raw_line, comp) = parse_comp(raw_line)?;
@@ -176,23 +272,10 @@ fn parse_instruction(raw_line: &str) -> IResult<&str, Line> {
     alt((parse_the_a_register_instruction, parse_c_instruction)).parse(raw_line)
 }
 
-fn parse_line(raw_line: &str) -> IResult<&str, Line> {
-    println!("raw in parse {}", raw_line);
-    alt((parse_comment, parse_label, parse_instruction)).parse(raw_line)
-}
-
-fn parse(raw_line: &str, env: &mut Environment) -> Option<Instruction> {
-    parse_line(raw_line)
+fn parse_line(raw_line: &str) -> Result<(&str, Line), Error<&str>> {
+    alt((parse_comment, parse_label, parse_instruction))
+        .parse(raw_line)
         .finish()
-        .ok()
-        .and_then(|(_, instruction)| match instruction {
-            Line::Comment => None,
-            Line::Label(label) => {
-                env.set((label, "0000".to_string()));
-                None
-            }
-            Line::Instruction(inst) => Some(inst),
-        })
 }
 
 #[cfg(test)]
@@ -229,18 +312,93 @@ mod tests {
         assert_eq!(do_it(source), Ok("1110111111111111".to_string()))
     }
 
-    // #[test]
-    // fn set_and_use_a_label() {
-    //     let source = "(start)
-    //                     D=0
-    //                     @start";
-    // 
-    //     let expected = "1110101010010000\
-    //                     0000000000000001"
-    //         .to_string();
-    // 
-    //     assert_eq!(do_it(source), Ok(expected))
-    // }
+    #[test]
+    fn set_m_to_m_plus_one() {
+        let source = "M=M+1";
+
+        assert_eq!(do_it(source), Ok("1111110111001000".to_string()))
+    }
+
+    #[test]
+    fn set_and_use_a_label() {
+        let source = "  D=0
+                      (start)
+                        D=0
+                        @start";
+
+        let expected = "1110101010010000\
+                        1110101010010000\
+                        0000000000000001"
+            .to_string();
+
+        assert_eq!(do_it(source), Ok(expected))
+    }
+
+    #[test]
+    fn use_a_variable() {
+        let source = "@a
+                      @b
+                      @a";
+
+        let expected = "0000000000010000\
+                        0000000000010001\
+                        0000000000010000"
+            .to_string();
+
+        assert_eq!(do_it(source), Ok(expected))
+    }
+
+    #[test]
+    fn example_from_book() {
+        let source = "\
+// Adds 1 + ... + 100
+       @i
+       M=1    // i=1
+       @sum
+       M=0    // sum=0
+(LOOP)
+       @i
+       D=M    // D=i
+       @100
+       D=D-A  // D=i-100
+       @END
+       D;JGT  // if (i-100)>0 goto END
+       @i
+       D=M    // D=i
+       @sum
+       M=D+M  // sum=sum+i
+       @i
+       M=M+1  // i=i+1
+       @LOOP
+       0;JMP  // goto LOOP
+ (END)
+       @END
+       0;JMP  // infinite loop";
+
+        let expected = "0000000000010000\
+                        1110111111001000\
+                        0000000000010001\
+                        1110101010001000\
+                        0000000000010000\
+                        1111110000010000\
+                        0000000001100100\
+                        1110010011010000\
+                        0000000000010010\
+                        1110001100000001\
+                        0000000000010000\
+                        1111110000010000\
+                        0000000000010001\
+                        1111000010001000\
+                        0000000000010000\
+                        1111110111001000\
+                        0000000000000100\
+                        1110101010000111\
+                        0000000000010010\
+                        1110101010000111"
+            .to_string();
+
+        assert_eq!(do_it(source), Ok(expected))
+    }
 
     // TODO - disallow integer literals bigger than whatever 15bit allows
 }
