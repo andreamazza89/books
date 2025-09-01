@@ -1,8 +1,7 @@
 use nom::branch::alt;
-use nom::bytes::complete::tag;
-use nom::character::anychar;
+use nom::bytes::complete::{tag, take_while1};
 use nom::character::complete::{alpha1, alphanumeric1, digit1, space0};
-use nom::combinator::map_res;
+use nom::combinator::{eof, map_res};
 use nom::error::Error;
 use nom::error::ErrorKind::Tag;
 use nom::multi::many1;
@@ -14,50 +13,52 @@ use std::collections::BTreeMap;
 fn main() {
     // Note: I'm not going to work on the file reading part as that's not very interesting for me
     // let source_file = vec![];
+    let assembly =
+        std::fs::read_to_string("./test-files/Pong.asm").expect("File needs to be there");
+
+    let compiled = do_it(assembly.as_str()).unwrap();
+
+    std::fs::write("./test-files/Pong.compiled", compiled).unwrap();
 }
 
 // TODO - make the error better typed? Well, first actually fail if the input is not valid assembly
 fn do_it(assembly: &str) -> Result<String, String> {
-    let mut env: Environment = Environment {
-        current_instruction_address: 0,
-        inner: BTreeMap::default(),
-        next_variable_address: 16,
-    };
+    let mut env = Environment::new();
 
-    let parsed_lines: Result<Vec<Option<String>>, _> = assembly
+    let parsed_lines: Result<Vec<Line>, _> = assembly
         .lines()
         .map(|raw_line| {
-            parse_line(raw_line).map(|(_, line)| {
+            parse_line(raw_line).map(|line| {
                 env.process_line(&line);
-                line.to_binary_instruction(&env)
+                line
             })
         })
         .collect();
 
-    let r: Result<String, _> = parsed_lines.map(|instructions| {
-        instructions
+    let r: Result<String, _> = parsed_lines.map(|lines| {
+        lines
             .into_iter()
-            .flatten()
+            .filter_map(|line| line.to_binary_instruction(&mut env))
             .collect::<Vec<String>>()
             .join("")
     });
 
-    r.map_err(|_| "woops".to_string())
+    r.map_err(|e| e.to_string())
 }
 
 enum Line {
     Comment,
+    EmptyLine,
     Instruction(Instruction),
     Label(String),
 }
 
 impl Line {
-    fn to_binary_instruction(&self, env: &Environment) -> Option<String> {
+    fn to_binary_instruction(&self, env: &mut Environment) -> Option<String> {
         match self {
             Line::Instruction(instruction) => Some(instruction.to_binary_instruction(env)),
 
-            Line::Comment => None,
-            Line::Label(_) => None,
+            Line::Comment | Line::Label(_) | Line::EmptyLine => None,
         }
     }
 }
@@ -68,15 +69,10 @@ enum Instruction {
 }
 
 impl Instruction {
-    fn to_binary_instruction(&self, env: &Environment) -> String {
+    fn to_binary_instruction(&self, env: &mut Environment) -> String {
         match self {
             Instruction::SetTheARegister(Value::Literal(int)) => format!("{:016b}", int),
-            Instruction::SetTheARegister(Value::Variable(variable)) => {
-                // TODO - would be better to return an Err instead of panicking
-                env.get(&variable)
-                    .expect("program is invalid if variable is not present at this point")
-                    .clone()
-            }
+            Instruction::SetTheARegister(Value::Variable(variable)) => env.get2(&variable).clone(),
             Instruction::Compute(c) => c.clone(),
         }
     }
@@ -95,37 +91,69 @@ struct Environment {
 }
 
 impl Environment {
+    fn new() -> Self {
+        let mut inner = BTreeMap::new();
+
+        inner.insert(String::from("R0"), 0);
+        inner.insert(String::from("SP"), 0);
+        inner.insert(String::from("R1"), 1);
+        inner.insert(String::from("LCL"), 1);
+        inner.insert(String::from("R2"), 2);
+        inner.insert(String::from("ARG"), 2);
+        inner.insert(String::from("R3"), 3);
+        inner.insert(String::from("THIS"), 3);
+        inner.insert(String::from("R4"), 4);
+        inner.insert(String::from("THAT"), 4);
+        inner.insert(String::from("R5"), 5);
+        inner.insert(String::from("R6"), 6);
+        inner.insert(String::from("R7"), 7);
+        inner.insert(String::from("R8"), 8);
+        inner.insert(String::from("R9"), 9);
+        inner.insert(String::from("R10"), 10);
+        inner.insert(String::from("R11"), 11);
+        inner.insert(String::from("R12"), 12);
+        inner.insert(String::from("R13"), 13);
+        inner.insert(String::from("R14"), 14);
+        inner.insert(String::from("R15"), 15);
+
+        inner.insert(String::from("SCREEN"), 16384);
+        inner.insert(String::from("KBD"), 24576);
+
+        Environment {
+            current_instruction_address: 0,
+            inner,
+            next_variable_address: 16,
+        }
+    }
+
     // TODO - I think we should disallow overwriting a variable.
     fn set(&mut self, entry: (String, u16)) -> () {
         self.inner.insert(entry.0, entry.1);
     }
 
-    fn get(&self, key: &str) -> Option<String> {
-        self.inner.get(key).map(|val| format!("{:016b}", val))
+    fn get2(&mut self, key: &str) -> String {
+        match self.inner.entry(key.to_string()) {
+            Entry::Vacant(vacant) => {
+                let next_address = self.next_variable_address;
+                vacant.insert(next_address);
+                self.next_variable_address += 1;
+                format!("{:016b}", next_address)
+            }
+            Entry::Occupied(occ) => {
+                format!("{:016b}", occ.get())
+            }
+        }
     }
 
     fn process_line(&mut self, line: &Line) -> () {
         match line {
-            Line::Instruction(instruction) => {
+            Line::Instruction(_) => {
                 self.current_instruction_address += 1;
-
-                match instruction {
-                    Instruction::SetTheARegister(Value::Variable(variable)) => {
-                        match self.inner.entry(variable.clone()) {
-                            Entry::Vacant(vacant) => {
-                                vacant.insert(self.next_variable_address);
-                                self.next_variable_address += 1;
-                            }
-                            Entry::Occupied(_) => {}
-                        };
-                    }
-                    _ => {}
-                }
             }
 
             Line::Label(label) => self.set((label.clone(), self.current_instruction_address)),
 
-            Line::Comment => {}
+            Line::Comment | Line::EmptyLine => {}
         }
     }
 }
@@ -137,10 +165,22 @@ fn parse_comment(raw_line: &str) -> IResult<&str, Line> {
     Ok((raw_line, Line::Comment))
 }
 
+fn parse_empty_line(raw_line: &str) -> IResult<&str, Line> {
+    let (raw_line, _) = terminated(space0, eof).parse(raw_line)?;
+
+    Ok((raw_line, Line::EmptyLine))
+}
+
 fn parse_label(raw_line: &str) -> IResult<&str, Line> {
     let (raw_line, _) = space0(raw_line)?;
 
-    let (raw_line, label) = delimited(tag("("), alphanumeric1, tag(")")).parse(raw_line)?;
+    let (raw_line, label) = delimited(
+        tag("("),
+        // TODO extract this as it's reused elsewhere
+        take_while1(|char| (char != ' ') && (char != ')')),
+        tag(")"),
+    )
+    .parse(raw_line)?;
 
     Ok((raw_line, Line::Label(String::from(label))))
 }
@@ -152,13 +192,16 @@ fn parse_literal(raw_line: &str) -> IResult<&str, Value> {
 }
 
 fn parse_variable(raw_line: &str) -> IResult<&str, Value> {
-    let (raw_line, variable) = alpha1.parse(raw_line)?;
+    let (raw_line, variable) =
+        take_while1(|char| (char != ' ') && (char != ')')).parse(raw_line)?;
 
     Ok((raw_line, Value::Variable(String::from(variable))))
 }
 
 fn parse_the_a_register_instruction(raw_line: &str) -> IResult<&str, Line> {
     let (raw_line, _) = tag("@")(raw_line)?;
+    // Note - the order in the alt is important: a literal is just digits, whereas a variable
+    // will parse on anything, including digits
     let (raw_line, value) = alt((parse_literal, parse_variable)).parse(raw_line)?;
 
     Ok((
@@ -214,7 +257,7 @@ fn parse_comp(raw_line: &str) -> IResult<&str, String> {
         "M" => Ok((raw_line, "1110000".to_string())),
         "!D" => Ok((raw_line, "0001101".to_string())),
         "!A" => Ok((raw_line, "0110001".to_string())),
-        "!M" => Ok((raw_line, "0110001".to_string())),
+        "!M" => Ok((raw_line, "1110001".to_string())),
         "-D" => Ok((raw_line, "0001111".to_string())),
         "-A" => Ok((raw_line, "0110011".to_string())),
         "-M" => Ok((raw_line, "1110011".to_string())),
@@ -257,7 +300,6 @@ fn parse_jump(raw_line: &str) -> IResult<&str, String> {
 }
 
 fn parse_c_instruction(raw_line: &str) -> IResult<&str, Line> {
-
     let (raw_line, dest) = parse_dest(raw_line).unwrap_or((raw_line, "000".to_string()));
     let (raw_line, comp) = parse_comp(raw_line)?;
     let (raw_line, jump) = parse_jump(raw_line).unwrap_or((raw_line, "000".to_string()));
@@ -272,10 +314,16 @@ fn parse_instruction(raw_line: &str) -> IResult<&str, Line> {
     alt((parse_the_a_register_instruction, parse_c_instruction)).parse(raw_line)
 }
 
-fn parse_line(raw_line: &str) -> Result<(&str, Line), Error<&str>> {
-    alt((parse_comment, parse_label, parse_instruction))
-        .parse(raw_line)
-        .finish()
+fn parse_line(raw_line: &str) -> Result<Line, Error<&str>> {
+    alt((
+        parse_comment,
+        parse_empty_line,
+        parse_label,
+        parse_instruction,
+    ))
+    .parse(raw_line)
+    .finish()
+    .map(|(_, line)| line)
 }
 
 #[cfg(test)]
@@ -286,6 +334,15 @@ mod tests {
     fn just_comments() {
         let source = "// This assembly program \
                       // does absolutely nothing \
+                      // but is a valid program";
+
+        assert_eq!(do_it(source), Ok("".to_string()))
+    }
+
+    #[test]
+    fn empty_line() {
+        let source = "// This assembly program
+                       
                       // but is a valid program";
 
         assert_eq!(do_it(source), Ok("".to_string()))
@@ -335,6 +392,21 @@ mod tests {
     }
 
     #[test]
+    fn use_and_set_a_label() {
+        let source = "  @END_EQ
+                        D=0
+                      (END_EQ)
+                        D=0";
+
+        let expected = "0000000000000010\
+                        1110101010010000\
+                        1110101010010000"
+            .to_string();
+
+        assert_eq!(do_it(source), Ok(expected))
+    }
+
+    #[test]
     fn use_a_variable() {
         let source = "@a
                       @b
@@ -344,6 +416,15 @@ mod tests {
                         0000000000010001\
                         0000000000010000"
             .to_string();
+
+        assert_eq!(do_it(source), Ok(expected))
+    }
+
+    #[test]
+    fn use_a_predefined_variable() {
+        let source = "@R15";
+
+        let expected = "0000000000001111".to_string();
 
         assert_eq!(do_it(source), Ok(expected))
     }
