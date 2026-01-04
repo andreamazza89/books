@@ -5,15 +5,17 @@ use nom::combinator::{map, map_res};
 use nom::sequence::preceded;
 use nom::{Finish, IResult, Parser};
 
+#[derive(Copy, Clone)]
 enum Command {
-    Add,
-    Eq,
-    Gt,
-    Sub,
-    Neg,
-    Not,
     Pop(Pop),
     Push(Push),
+    Add,
+    Sub,
+    Neg,
+    Eq,
+    Gt,
+    Lt,
+    Not,
 }
 
 impl Command {
@@ -22,30 +24,35 @@ impl Command {
             Command::Pop(cmd) => pop(cmd),
             Command::Push(cmd) => push(cmd),
             Command::Add => add(),
-            Command::Eq => eq(unique_label_suffix),
-            Command::Gt => gt(unique_label_suffix),
             Command::Sub => sub(),
             Command::Neg => neg(),
+            Command::Eq => eq(unique_label_suffix),
+            Command::Gt => gt(unique_label_suffix),
+            Command::Lt => todo!(),
             Command::Not => not(),
         }
     }
 }
 
+#[derive(Copy, Clone)]
 struct Pop {
     base_address_register: MemorySegment,
     offset: u8,
 }
 
+#[derive(Copy, Clone)]
 struct Push {
     from: PushContent,
 }
 
+#[derive(Copy, Clone)]
 enum PushContent {
     Constant(u16),
     // i.e. which memory segment and at what offset
     Memory(MemorySegment, u8),
 }
 
+#[derive(Copy, Clone)]
 enum MemorySegment {
     // TODO - add all of them
     LCL,
@@ -82,7 +89,15 @@ fn translate(vm_code: &str) -> Result<String, String> {
 
 fn parse_one_line(line: &str) -> Result<Command, String> {
     alt((
-        parse_push, parse_pop, parse_add, parse_eq, parse_gt, parse_sub, parse_neg, parse_not,
+        parse_push,
+        parse_pop,
+        _parse_command("add", Command::Add),
+        _parse_command("sub", Command::Sub),
+        _parse_command("neg", Command::Neg),
+        _parse_command("eq", Command::Eq),
+        _parse_command("gt", Command::Gt),
+        _parse_command("lt", Command::Lt),
+        _parse_command("not", Command::Not),
     ))
     .parse(line)
     .finish()
@@ -153,46 +168,15 @@ fn parse_pop(line: &str) -> IResult<&str, Command> {
     ))
 }
 
-fn parse_add(line: &str) -> IResult<&str, Command> {
-    let (line, _) = space0(line)?;
-    let (_, _) = tag("add")(line)?;
-
-    Ok((line, Command::Add))
-}
-
-fn parse_eq(line: &str) -> IResult<&str, Command> {
-    let (line, _) = space0(line)?;
-    let (_, _) = tag("eq")(line)?;
-
-    Ok((line, Command::Eq))
-}
-
-fn parse_gt(line: &str) -> IResult<&str, Command> {
-    let (line, _) = space0(line)?;
-    let (_, _) = tag("gt")(line)?;
-
-    Ok((line, Command::Gt))
-}
-
-fn parse_sub(line: &str) -> IResult<&str, Command> {
-    let (line, _) = space0(line)?;
-    let (_, _) = tag("sub")(line)?;
-
-    Ok((line, Command::Sub))
-}
-
-fn parse_neg(line: &str) -> IResult<&str, Command> {
-    let (line, _) = space0(line)?;
-    let (_, _) = tag("neg")(line)?;
-
-    Ok((line, Command::Neg))
-}
-
-fn parse_not(line: &str) -> IResult<&str, Command> {
-    let (line, _) = space0(line)?;
-    let (_, _) = tag("not")(line)?;
-
-    Ok((line, Command::Not))
+fn _parse_command<'a>(
+    keyword: &'static str,
+    command: Command,
+) -> impl Fn(&'a str) -> IResult<&'a str, Command> {
+    move |input: &'a str| {
+        let (input, _) = space0(input)?;
+        let (input, _) = tag(keyword)(input)?;
+        Ok((input, command))
+    }
 }
 
 const TRUE: &str = "-1";
@@ -223,7 +207,7 @@ M=D",
         Push {
             from: PushContent::Memory(segment, offset),
         } => {
-            // TODO - extract this thing into MemorySegment::to_assembly_string
+            // TODO - maybe extract this thing into MemorySegment::to_assembly_string
             let target_register = match segment {
                 MemorySegment::LCL => "LCL",
                 MemorySegment::THIS => "THIS",
