@@ -64,8 +64,21 @@ struct MemoryTarget {
 #[derive(Copy, Clone)]
 enum MemorySegment {
     // TODO - add all of them
+    ARG,
     LCL,
     THIS,
+    THAT,
+}
+
+impl MemorySegment {
+    fn to_assembly_register_str(&self) -> &str {
+        match self {
+            MemorySegment::ARG => "ARG",
+            MemorySegment::LCL => "LCL",
+            MemorySegment::THIS => "THIS",
+            MemorySegment::THAT => "THAT",
+        }
+    }
 }
 
 fn main() {
@@ -119,8 +132,10 @@ fn parse_one_line(line: &str) -> Result<Command, String> {
 fn parse_memory_target(input: &str) -> IResult<&str, MemoryTarget> {
     let (input, _) = space0(input)?;
     let (input, segment) = alt((
+        map(tag("argument"), |_| MemorySegment::ARG),
         map(tag("local"), |_| MemorySegment::LCL),
         map(tag("this"), |_| MemorySegment::THIS),
+        map(tag("that"), |_| MemorySegment::THAT),
     ))
     .parse(input)?;
 
@@ -224,27 +239,23 @@ M=D",
         Push {
             from: PushContent::Memory(target),
         } => {
-            // TODO - maybe extract this thing into MemorySegment::to_assembly_string?
-            let target_register = match target.segment {
-                MemorySegment::LCL => "LCL",
-                MemorySegment::THIS => "THIS",
-            };
+            let target_register = target.segment.to_assembly_register_str();
+            let offset = target.index_within_segment.to_string();
 
             format!(
                 "
 //////////////////////////////
 //////////////////////////////
 //// START PUSH (SEGMENT) ////
-@{}
+@{target_register}
 D=M
-@{}
+@{offset}
 D=D+A
 A=D
 D=M
 @SP
 A=M
-M=D",
-                target_register, target.index_within_segment
+M=D"
             )
         }
     }
@@ -264,11 +275,7 @@ M=M-1
 ";
 
 fn pop(command: &Pop) -> String {
-    let target_register = match command.target.segment {
-        MemorySegment::LCL => "LCL",
-        MemorySegment::THIS => "THIS",
-    };
-
+    let target_register = command.target.segment.to_assembly_register_str();
     let offset = command.target.index_within_segment.to_string();
 
     // pop into D and store it in R13
