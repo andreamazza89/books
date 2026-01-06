@@ -15,6 +15,8 @@ enum Command {
     Eq,
     Gt,
     Lt,
+    And,
+    Or,
     Not,
 }
 
@@ -29,6 +31,8 @@ impl Command {
             Command::Eq => eq(unique_label_suffix),
             Command::Gt => gt(unique_label_suffix),
             Command::Lt => lt(unique_label_suffix),
+            Command::Or => or(),
+            Command::And => and(),
             Command::Not => not(),
         }
     }
@@ -97,6 +101,8 @@ fn parse_one_line(line: &str) -> Result<Command, String> {
         _parse_command("eq", Command::Eq),
         _parse_command("gt", Command::Gt),
         _parse_command("lt", Command::Lt),
+        _parse_command("and", Command::And),
+        _parse_command("or", Command::Or),
         _parse_command("not", Command::Not),
     ))
     .parse(line)
@@ -306,37 +312,36 @@ A=M
 M=D
 ";
 
-fn add() -> String {
+fn binary_operation(operation: &str) -> String {
     let pop_two = pop_two_arguments();
 
     format!(
         "
 //////////////////////
 //////////////////////
-//// START ADD ///////
+//// START {operation}
 {pop_two}
-  // Add D and R13
 @R13
-D=D+M
+D=D{operation}M
 {PUSH_D_INTO_THE_STACK}
 "
     )
 }
 
-fn sub() -> String {
-    let pop_two = pop_two_arguments();
+fn add() -> String {
+    binary_operation("+")
+}
 
-    format!(
-        "
-///////////////////
-///////////////////
-//// START SUB ////
-{pop_two}
-// Subtract D and R13
-@R13
-D=D-M
-{PUSH_D_INTO_THE_STACK}",
-    )
+fn sub() -> String {
+    binary_operation("-")
+}
+
+fn or() -> String {
+    binary_operation("|")
+}
+
+fn and() -> String {
+    binary_operation("&")
 }
 
 fn neg() -> String {
