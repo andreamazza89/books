@@ -40,8 +40,7 @@ impl Command {
 
 #[derive(Copy, Clone)]
 struct Pop {
-    base_address_register: MemorySegment,
-    offset: u8,
+    target: MemoryTarget,
 }
 
 #[derive(Copy, Clone)]
@@ -53,7 +52,13 @@ struct Push {
 enum PushContent {
     Constant(u16),
     // i.e. which memory segment and at what offset
-    Memory(MemorySegment, u8),
+    Memory(MemoryTarget),
+}
+
+#[derive(Copy, Clone)]
+struct MemoryTarget {
+    segment: MemorySegment,
+    index_within_segment: u8,
 }
 
 #[derive(Copy, Clone)]
@@ -111,15 +116,25 @@ fn parse_one_line(line: &str) -> Result<Command, String> {
     .map_err(|_| format!("Parsing failed for line: {}", line))
 }
 
-fn parse_memory_segment(input: &str) -> IResult<&str, MemorySegment> {
+fn parse_memory_target(input: &str) -> IResult<&str, MemoryTarget> {
     let (input, _) = space0(input)?;
-    let (input, memory_segment) = alt((
+    let (input, segment) = alt((
         map(tag("local"), |_| MemorySegment::LCL),
         map(tag("this"), |_| MemorySegment::THIS),
     ))
     .parse(input)?;
 
-    Ok((input, memory_segment))
+    let (input, _) = space0(input)?;
+    let (_, index_within_segment) =
+        map_res(digit1, |digits: &str| digits.parse::<u8>()).parse(input)?;
+
+    Ok((
+        input,
+        MemoryTarget {
+            segment,
+            index_within_segment,
+        },
+    ))
 }
 
 fn parse_push(line: &str) -> IResult<&str, Command> {
@@ -147,10 +162,7 @@ fn parse_constant(input: &str) -> IResult<&str, PushContent> {
 fn parse_push_content(input: &str) -> IResult<&str, PushContent> {
     let (input, _) = space0(input)?;
     let (input, push_content) = alt((
-        // TODO - actually parse the offset (maybe we have a VirtualMemoryTarget type?)
-        map(parse_memory_segment, |segment| {
-            PushContent::Memory(segment, 8)
-        }),
+        map(parse_memory_target, PushContent::Memory),
         parse_constant,
     ))
     .parse(input)?;
@@ -161,15 +173,12 @@ fn parse_push_content(input: &str) -> IResult<&str, PushContent> {
 fn parse_pop(line: &str) -> IResult<&str, Command> {
     let (line, _) = space0(line)?;
     let (line, _) = tag("pop")(line)?;
-    let (line, memory_segment) = parse_memory_segment(line)?;
-    let (line, _) = space0(line)?;
-    let (_, offset) = map_res(digit1, |digits: &str| digits.parse::<u8>()).parse(line)?;
+    let (line, memory_target) = parse_memory_target(line)?;
 
     Ok((
         line,
         Command::Pop(Pop {
-            base_address_register: memory_segment,
-            offset,
+            target: memory_target,
         }),
     ))
 }
@@ -213,10 +222,10 @@ M=D",
             )
         }
         Push {
-            from: PushContent::Memory(segment, offset),
+            from: PushContent::Memory(target),
         } => {
-            // TODO - maybe extract this thing into MemorySegment::to_assembly_string
-            let target_register = match segment {
+            // TODO - maybe extract this thing into MemorySegment::to_assembly_string?
+            let target_register = match target.segment {
                 MemorySegment::LCL => "LCL",
                 MemorySegment::THIS => "THIS",
             };
@@ -235,7 +244,7 @@ D=M
 @SP
 A=M
 M=D",
-                target_register, offset
+                target_register, target.index_within_segment
             )
         }
     }
@@ -255,12 +264,12 @@ M=M-1
 ";
 
 fn pop(command: &Pop) -> String {
-    let target_register = match command.base_address_register {
+    let target_register = match command.target.segment {
         MemorySegment::LCL => "LCL",
         MemorySegment::THIS => "THIS",
     };
 
-    let offset = command.offset.to_string();
+    let offset = command.target.index_within_segment.to_string();
 
     // pop into D and store it in R13
     // figure out where we are writing to by reading the base address of segment + offset
