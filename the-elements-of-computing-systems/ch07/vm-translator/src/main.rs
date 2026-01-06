@@ -28,7 +28,7 @@ impl Command {
             Command::Neg => neg(),
             Command::Eq => eq(unique_label_suffix),
             Command::Gt => gt(unique_label_suffix),
-            Command::Lt => todo!(),
+            Command::Lt => lt(unique_label_suffix),
             Command::Not => not(),
         }
     }
@@ -193,7 +193,9 @@ fn push(command: &Push) -> String {
         } => {
             format!(
                 "
-//// START PUSH (CONSTANT)
+//////////////////////////////
+//////////////////////////////
+//// START PUSH (CONSTANT) ///
 @SP
 M=M+1
 @{}
@@ -215,7 +217,9 @@ M=D",
 
             format!(
                 "
-//// START PUSH (SEGMENT)
+//////////////////////////////
+//////////////////////////////
+//// START PUSH (SEGMENT) ////
 @{}
 D=M
 @{}
@@ -259,7 +263,10 @@ fn pop(command: &Pop) -> String {
     // set A to the target address
     // store the popped value into the taget address (M=D)
     format!(
-        "//// START POP (R13-popped value; R14-target memory address)
+        "
+        /////////////////////////////////////////////////////////////////
+        /////////////////////////////////////////////////////////////////
+        //// START POP (R13-popped value; R14-target memory address) ////
          {POP_INTO_D}
          @R13
          M=D
@@ -304,7 +311,9 @@ fn add() -> String {
 
     format!(
         "
-//// START ADD
+//////////////////////
+//////////////////////
+//// START ADD ///////
 {pop_two}
   // Add D and R13
 @R13
@@ -319,7 +328,9 @@ fn sub() -> String {
 
     format!(
         "
-//// START SUB
+///////////////////
+///////////////////
+//// START SUB ////
 {pop_two}
 // Subtract D and R13
 @R13
@@ -331,68 +342,66 @@ D=D-M
 fn neg() -> String {
     format!(
         "
-//// START NEG
+///////////////////
+///////////////////
+//// START NEG ////
 {POP_INTO_D}
 D=-D
 {PUSH_D_INTO_THE_STACK}"
     )
 }
 
-fn eq(unique_label_suffix: &mut usize) -> String {
+fn comparison_operation(
+    operation_name: &str,
+    comparison: &str,
+    unique_label_suffix: &mut usize,
+) -> String {
     let pop_two = pop_two_arguments();
 
-    let is_equal_label = make_unique_label("IS_EQUAL", unique_label_suffix);
-    let end_eq_label = make_unique_label("END_EQ", unique_label_suffix);
+    let successful_comparison_label = make_unique_label(operation_name, unique_label_suffix);
+    let end_label = make_unique_label("END_COMPARISON", unique_label_suffix);
 
     format!(
         "
-//// START EQ
+///////////////////////////////////
+///////////////////////////////////
+//// START {operation_name}
 {pop_two}
 // Subtract D and R13
   @R13
+  // TODO - I think we can make the following three instruction into 2
   D=D-M
-  @{is_equal_label}
-  D;JNE
-// DID NOT JUMP, SO IT IS EQUAL
-  @{end_eq_label}
-  D={TRUE};JMP
-({is_equal_label})
-  D={FALSE}
-({end_eq_label})
+  @{successful_comparison_label}
+  D;{comparison}
+// DID NOT JUMP, SO IT IS NOT {operation_name}
+  @{end_label}
+  D={FALSE};JMP
+({successful_comparison_label})
+  D={TRUE}
+({end_label})
   {PUSH_D_INTO_THE_STACK}",
     )
 }
 
+fn eq(unique_label_suffix: &mut usize) -> String {
+    comparison_operation("IS_EQUAL_TO", "JEQ", unique_label_suffix)
+}
+
 fn gt(unique_label_suffix: &mut usize) -> String {
-    let pop_two = pop_two_arguments();
+    comparison_operation("IS_GREATER_THAN", "JGT", unique_label_suffix)
+}
 
-    let is_greater_than_label = make_unique_label("IS_GREATER_THAN", unique_label_suffix);
-    let end_gt_label = make_unique_label("END_GT", unique_label_suffix);
-
-    format!(
-        "
-//// START GT
-{pop_two}
-// Subtract D and R13
-  @R13
-  D=D-M
-  @{is_greater_than_label}
-  D;JGT
-// DID NOT JUMP, SO IT IS NOT GREATER THAN
-  @{end_gt_label}
-  D={FALSE};JMP
-({is_greater_than_label})
-  D={TRUE}
-({end_gt_label})
-  {PUSH_D_INTO_THE_STACK}",
-    )
+fn lt(unique_label_suffix: &mut usize) -> String {
+    comparison_operation("IS_LESS_THAN", "JLT", unique_label_suffix)
 }
 
 fn not() -> String {
     format!(
         "
-//// START NOT
-{POP_INTO_D}
+/////////////////////
+/////////////////////
+//// START NOT //////
+ {POP_INTO_D}
 D=!D
 {PUSH_D_INTO_THE_STACK}"
     )
