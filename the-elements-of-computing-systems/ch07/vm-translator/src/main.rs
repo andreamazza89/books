@@ -226,14 +226,9 @@ fn push(command: &Push) -> String {
 //////////////////////////////
 //////////////////////////////
 //// START PUSH (CONSTANT) ///
-@SP
-M=M+1
-@{}
+@{constant}
 D=A
-@SP
-A=M
-M=D",
-                constant
+{PUSH_D_INTO_THE_STACK}"
             )
         }
         Push {
@@ -253,9 +248,7 @@ D=M
 D=D+A
 A=D
 D=M
-@SP
-A=M
-M=D"
+{PUSH_D_INTO_THE_STACK}"
             )
         }
     }
@@ -323,9 +316,10 @@ M=D
 const PUSH_D_INTO_THE_STACK: &str = "
 // PUSH D into the stack
 @SP
-M=M+1
 A=M
 M=D
+@SP
+M=M+1
 ";
 
 fn binary_operation(operation: &str) -> String {
