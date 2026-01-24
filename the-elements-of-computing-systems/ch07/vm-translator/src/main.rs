@@ -61,13 +61,14 @@ struct MemoryTarget {
     index_within_segment: u8,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 enum MemorySegment {
     // TODO - add all of them
     ARG,
     LCL,
     THIS,
     THAT,
+    TEMP,
 }
 
 impl MemorySegment {
@@ -77,15 +78,28 @@ impl MemorySegment {
             MemorySegment::LCL => "LCL",
             MemorySegment::THIS => "THIS",
             MemorySegment::THAT => "THAT",
+            MemorySegment::TEMP => "TEMP",
         }
     }
 }
 
-fn main() {
-    let foo = translate("push constant 40 \n push constant 2 \n gt");
+// [472]
+// lcl[10]
+// this[_,_,_,_,_,_, 36]
+// that[_,_,42,_,_,45]
+// temp[_,_,_,_,_,_, 510]
+// arg[_, 21 22]
 
-    if let Ok(output) = foo.clone() {
-        print!("{output}")
+fn main() {
+    let foo = translate(
+        "push constant 50 
+         push  constant 10 
+         sub",
+    );
+
+    match foo {
+        Ok(asm) => print!("{asm}"),
+        Err(err) => print!("{err}"),
     }
 }
 
@@ -136,6 +150,7 @@ fn parse_memory_target(input: &str) -> IResult<&str, MemoryTarget> {
         map(tag("local"), |_| MemorySegment::LCL),
         map(tag("this"), |_| MemorySegment::THIS),
         map(tag("that"), |_| MemorySegment::THAT),
+        map(tag("temp"), |_| MemorySegment::TEMP),
     ))
     .parse(input)?;
 
@@ -212,6 +227,36 @@ fn _parse_command<'a>(
 const TRUE: &str = "-1";
 const FALSE: &str = "0";
 
+// figure out where we are writing to by EITHER
+//   reading the base address of segment + offset
+//   OR if it's in TEMP, then just 5 + offset
+// store the target address in R14
+fn store_target_address_into_r14(target: &MemoryTarget) -> String {
+    let target_register = target.segment.to_assembly_register_str();
+    let offset = target.index_within_segment.to_string();
+
+    if target.segment == MemorySegment::TEMP {
+        let address = 5 + target.index_within_segment;
+        format!(
+            "@{address}
+            D=A
+            @R14
+            M=D
+            "
+        )
+    } else {
+        format!(
+            "
+         @{target_register}
+         D=M
+         @{offset}
+         D=D+A
+         @R14
+         M=D "
+        )
+    }
+}
+
 // push
 // increment the stack pointer
 // if constant, skip, else read from the appropriate virtual segment into a temp reg
@@ -234,19 +279,15 @@ D=A
         Push {
             from: PushContent::Memory(target),
         } => {
-            let target_register = target.segment.to_assembly_register_str();
-            let offset = target.index_within_segment.to_string();
+            let store_target_address_in_r14 = store_target_address_into_r14(target);
 
             format!(
                 "
 //////////////////////////////
 //////////////////////////////
 //// START PUSH (SEGMENT) ////
-@{target_register}
-D=M
-@{offset}
-D=D+A
-A=D
+{store_target_address_in_r14}
+// this assumes that the previous command leaves A = R14
 D=M
 {PUSH_D_INTO_THE_STACK}"
             )
@@ -255,48 +296,39 @@ D=M
 }
 
 //////
-// read the value at the current stack pointer into D and update the stack pointer to SP--
+// update the stack pointer to SP-- and read the value at the current stack pointer into D
 const POP_INTO_D: &str = "
-//// START POP_INTERNAL (stores popped value in D and decrements the stack pointer)
-@SP
-D=M
-A=D
-D=M
+//// START POP_INTERNAL (decrements the stack pointer and stores the popped value in D)
 @SP
 M=M-1
+A=M
+D=M
 //// END POP_INTERNAL
 ";
 
 fn pop(command: &Pop) -> String {
-    let target_register = command.target.segment.to_assembly_register_str();
-    let offset = command.target.index_within_segment.to_string();
+    let store_target_address_into_r14 = store_target_address_into_r14(&command.target);
 
-    // pop into D and store it in R13
-    // figure out where we are writing to by reading the base address of segment + offset
-    // store the target address in R14
-    // set D to the popped value
-    // set A to the target address
-    // store the popped value into the taget address (M=D)
     format!(
         "
         /////////////////////////////////////////////////////////////////
         /////////////////////////////////////////////////////////////////
         //// START POP (R13-popped value; R14-target memory address) ////
+        /// 
+        // pop into D and store it in R13
          {POP_INTO_D}
          @R13
          M=D
-         @{target_register}
-         D=M
-         @{offset}
-         D=D+A
-         @R14
-         M=D
+         {store_target_address_into_r14}
+        // set D to the popped value
          @R13
          D=M
+        // set A to the target address
          @R14
          A=M
+        // store the popped value into the taget address (M=D)
          M=D
-         //// END POP"
+        //// END POP"
     )
 }
 
