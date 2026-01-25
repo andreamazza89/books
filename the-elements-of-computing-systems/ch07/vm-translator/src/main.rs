@@ -83,19 +83,8 @@ impl MemorySegment {
     }
 }
 
-// [472]
-// lcl[10]
-// this[_,_,_,_,_,_, 36]
-// that[_,_,42,_,_,45]
-// temp[_,_,_,_,_,_, 510]
-// arg[_, 21 22]
-
 fn main() {
-    let foo = translate(
-        "push constant 50 
-         push  constant 10 
-         sub",
-    );
+    let foo = translate("push constant 10");
 
     match foo {
         Ok(asm) => print!("{asm}"),
@@ -288,6 +277,7 @@ D=A
 //// START PUSH (SEGMENT) ////
 {store_target_address_in_r14}
 // this assumes that the previous command leaves A = R14
+A=M
 D=M
 {PUSH_D_INTO_THE_STACK}"
             )
