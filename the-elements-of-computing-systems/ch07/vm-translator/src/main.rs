@@ -70,6 +70,7 @@ enum MemorySegment {
     THAT,
     TEMP,
     POINTER,
+    STATIC,
 }
 
 impl MemorySegment {
@@ -84,26 +85,26 @@ impl MemorySegment {
             MemorySegment::POINTER => {
                 unreachable!("explain how if we had a better type, then this would not be required")
             }
+            // TODO - explain how if we had a better type, then this would not be required
+            MemorySegment::STATIC => {
+                unreachable!("explain how if we had a better type, then this would not be required")
+            }
         }
     }
 }
 
 fn main() {
     let foo = translate(
-        "push constant 3030
-pop pointer 0
-push constant 3040
-pop pointer 1
-push constant 32
-pop this 2
-push constant 46
-pop that 6
-push pointer 0
-push pointer 1
-add
-push this 2
+        "push constant 111
+push constant 333
+push constant 888
+pop static 8
+pop static 3
+pop static 1
+push static 3
+push static 1
 sub
-push that 6
+push static 8
 add",
     );
 
@@ -162,6 +163,7 @@ fn parse_memory_target(input: &str) -> IResult<&str, MemoryTarget> {
         map(tag("that"), |_| MemorySegment::THAT),
         map(tag("temp"), |_| MemorySegment::TEMP),
         map(tag("pointer"), |_| MemorySegment::POINTER),
+        map(tag("static"), |_| MemorySegment::STATIC),
     ))
     .parse(input)?;
 
@@ -261,6 +263,17 @@ fn store_target_address_into_r14(target: &MemoryTarget) -> String {
             } else {
                 "THAT"
             };
+            format!(
+                "@{address}
+            D=A
+            @R14
+            M=D
+            "
+            )
+        }
+        MemorySegment::STATIC => {
+            // TODO - filename should come from main or something
+            let address = format!("FILENAME.{}", target.index_within_segment);
             format!(
                 "@{address}
             D=A
