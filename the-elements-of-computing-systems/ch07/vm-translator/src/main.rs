@@ -69,6 +69,7 @@ enum MemorySegment {
     THIS,
     THAT,
     TEMP,
+    POINTER,
 }
 
 impl MemorySegment {
@@ -79,12 +80,32 @@ impl MemorySegment {
             MemorySegment::THIS => "THIS",
             MemorySegment::THAT => "THAT",
             MemorySegment::TEMP => "TEMP",
+            // TODO - explain how if we had a better type, then this would not be required
+            MemorySegment::POINTER => {
+                unreachable!("explain how if we had a better type, then this would not be required")
+            }
         }
     }
 }
 
 fn main() {
-    let foo = translate("push constant 10");
+    let foo = translate(
+        "push constant 3030
+pop pointer 0
+push constant 3040
+pop pointer 1
+push constant 32
+pop this 2
+push constant 46
+pop that 6
+push pointer 0
+push pointer 1
+add
+push this 2
+sub
+push that 6
+add",
+    );
 
     match foo {
         Ok(asm) => print!("{asm}"),
@@ -140,6 +161,7 @@ fn parse_memory_target(input: &str) -> IResult<&str, MemoryTarget> {
         map(tag("this"), |_| MemorySegment::THIS),
         map(tag("that"), |_| MemorySegment::THAT),
         map(tag("temp"), |_| MemorySegment::TEMP),
+        map(tag("pointer"), |_| MemorySegment::POINTER),
     ))
     .parse(input)?;
 
@@ -219,30 +241,48 @@ const FALSE: &str = "0";
 // figure out where we are writing to by EITHER
 //   reading the base address of segment + offset
 //   OR if it's in TEMP, then just 5 + offset
+//   OR if it's POINTER, then it's either THIS or THAT, depending on the offset
 // store the target address in R14
 fn store_target_address_into_r14(target: &MemoryTarget) -> String {
-    let target_register = target.segment.to_assembly_register_str();
-    let offset = target.index_within_segment.to_string();
-
-    if target.segment == MemorySegment::TEMP {
-        let address = 5 + target.index_within_segment;
-        format!(
-            "@{address}
+    match target.segment {
+        MemorySegment::TEMP => {
+            let address = 5 + target.index_within_segment;
+            format!(
+                "@{address}
             D=A
             @R14
             M=D
             "
-        )
-    } else {
-        format!(
+            )
+        }
+        MemorySegment::POINTER => {
+            let address = if target.index_within_segment == 0 {
+                "THIS"
+            } else {
+                "THAT"
+            };
+            format!(
+                "@{address}
+            D=A
+            @R14
+            M=D
             "
+            )
+        }
+        _ => {
+            let target_register = target.segment.to_assembly_register_str();
+            let offset = target.index_within_segment.to_string();
+
+            format!(
+                "
          @{target_register}
          D=M
          @{offset}
          D=D+A
          @R14
          M=D "
-        )
+            )
+        }
     }
 }
 
