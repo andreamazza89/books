@@ -22,6 +22,7 @@ enum Command {
     Not,
     // branching
     Label(String),
+    IfGoto(String),
 }
 
 impl Command {
@@ -40,7 +41,8 @@ impl Command {
             Command::Not => not(),
             // TODO - use the function name to make the label unique within the file
             // (assuming) function names are unique
-            Command::Label(label) => format!("({label})"),
+            Command::Label(label) => format!("\n({label})\n"),
+            Command::IfGoto(label) => if_goto(label),
         }
     }
 }
@@ -103,8 +105,19 @@ impl MemorySegment {
 fn main() {
     let foo = translate(
         "	push constant 0    
-   label LOOP
 	pop local 0         // sum = 0
+label LOOP
+	push argument 0     
+	push local 0
+	add
+	pop local 0	        // sum = sum + n
+	push argument 0
+	push constant 1
+	sub
+	pop argument 0      // n--
+	push argument 0
+	if-goto LOOP        // if n > 0, goto LOOP
+	push local 0        // else, pushes sum to the stack's top
 ",
     );
 
@@ -148,6 +161,7 @@ fn parse_one_line(line: &str) -> Result<Command, String> {
         _parse_command("or", || Command::Or),
         _parse_command("not", || Command::Not),
         parse_label,
+        parse_if_goto,
     ))
     .parse(line)
     .finish()
@@ -244,10 +258,21 @@ where
 fn parse_label(line: &str) -> IResult<&str, Command> {
     let (line, _) = space0(line)?;
     let (line, _) = tag("label ")(line)?;
-    let (line, label) =
-        take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == ':' || c == '.')(line)?;
+    let (line, label) = parse_label_identifier(line)?;
 
     Ok((line, Command::Label(label.to_string())))
+}
+
+fn parse_label_identifier(line: &str) -> IResult<&str, &str> {
+    take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == ':' || c == '.')(line)
+}
+
+fn parse_if_goto(line: &str) -> IResult<&str, Command> {
+    let (line, _) = space0(line)?;
+    let (line, _) = tag("if-goto ")(line)?;
+    let (line, label) = parse_label_identifier(line)?;
+
+    Ok((line, Command::IfGoto(label.to_string())))
 }
 
 const TRUE: &str = "-1";
@@ -384,7 +409,8 @@ fn pop(command: &Pop) -> String {
          A=M
         // store the popped value into the taget address (M=D)
          M=D
-        //// END POP"
+        //// END POP
+        "
     )
 }
 
@@ -507,5 +533,16 @@ fn not() -> String {
  {POP_INTO_D}
 D=!D
 {PUSH_D_INTO_THE_STACK}"
+    )
+}
+
+fn if_goto(label: &String) -> String {
+    // We jump to the label if the popped value is
+    // less than zero (-1 is TRUE)
+    format!(
+        "
+        {POP_INTO_D}
+        @{label}
+        D;JLT"
     )
 }
