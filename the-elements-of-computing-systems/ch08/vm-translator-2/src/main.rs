@@ -1,6 +1,6 @@
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while1};
-use nom::character::complete::{digit1, space0};
+use nom::character::complete::{digit1, space0, space1};
 use nom::combinator::{map, map_res};
 use nom::sequence::preceded;
 use nom::{Finish, IResult, Parser};
@@ -24,6 +24,8 @@ enum Command {
     Label(String),
     IfGoto(String),
     Goto(String),
+    // function
+    FunctionDefinition(String, u8),
 }
 
 impl Command {
@@ -43,6 +45,9 @@ impl Command {
             Command::Label(label) => function_label(label, unique_label_suffix),
             Command::IfGoto(label) => if_goto(label),
             Command::Goto(label) => goto(label),
+            Command::FunctionDefinition(function_name, n_variables) => {
+                function_definition(function_name, *n_variables)
+            }
         }
     }
 }
@@ -154,13 +159,6 @@ fn translate(vm_code: &str) -> Result<String, String> {
     // suffix and increment it whenever we make a label to avoid 'collision'
     let mut unique_label_suffix = 0;
 
-    // this is to generate labels that are scoped to a function within a file. (vm) Labels
-    // are only allowed within the context of a function and are scoped to their function.
-    // This means that you can reuse the same label across all function definitions, so
-    // we use the function name (which must be unique) to avoid 'collision'
-    // This variable is updated whenever we 'enter' a function definition
-    let mut current_function_name = "no-function-yet";
-
     Ok(vm_code
         .lines()
         // TODO - remove comments before parsing, or make 'Comment'
@@ -189,6 +187,7 @@ fn parse_one_line(line: &str) -> Result<Command, String> {
         parse_label,
         parse_if_goto,
         parse_goto,
+        parse_function_definition,
     ))
     .parse(line)
     .finish()
@@ -309,6 +308,20 @@ fn parse_goto(line: &str) -> IResult<&str, Command> {
 
     Ok((line, Command::Goto(label.to_string())))
 }
+
+fn parse_function_definition(line: &str) -> IResult<&str, Command> {
+    let (line, _) = space0(line)?;
+    let (line, _) = tag("label ")(line)?;
+    let (line, function_name) = parse_label_identifier(line)?;
+    let (line, _) = space1(line)?;
+    let (line, n_variables) = map_res(digit1, |digits: &str| digits.parse::<u8>()).parse(line)?;
+
+    Ok((
+        line,
+        Command::FunctionDefinition(function_name.to_string(), n_variables),
+    ))
+}
+
 const TRUE: &str = "-1";
 const FALSE: &str = "0";
 
@@ -592,5 +605,24 @@ fn goto(label: &String) -> String {
         "
         @{label}
         D;JMP"
+    )
+}
+
+fn function_definition(name: &String, n_variables: u8) -> String {
+    let local_variables: String = (1..n_variables)
+        .map(|_| {
+            push(
+                &(Push {
+                    from: PushContent::Constant(0),
+                }),
+            )
+        })
+        .collect();
+
+    format!(
+        "
+        @function_definition_{name}
+        {local_variables}
+        "
     )
 }
