@@ -23,6 +23,7 @@ enum Command {
     // branching
     Label(String),
     IfGoto(String),
+    Goto(String),
 }
 
 impl Command {
@@ -39,10 +40,9 @@ impl Command {
             Command::Or => or(),
             Command::And => and(),
             Command::Not => not(),
-            // TODO - use the function name to make the label unique within the file
-            // (assuming) function names are unique
-            Command::Label(label) => format!("\n({label})\n"),
+            Command::Label(label) => function_label(label, unique_label_suffix),
             Command::IfGoto(label) => if_goto(label),
+            Command::Goto(label) => goto(label),
         }
     }
 }
@@ -104,21 +104,35 @@ impl MemorySegment {
 
 fn main() {
     let foo = translate(
-        "	push constant 0    
-	pop local 0         // sum = 0
+        "	push argument 1         // sets THAT, the base address of the
+	pop pointer 1           // that segment, to argument[1]
+	push constant 0         // sets the series' first and second
+	pop that 0              // elements to 0 and 1, respectively       
+	push constant 1   
+	pop that 1              
+	push argument 0         // sets n, the number of remaining elements
+	push constant 2         // to be computed, to argument[0] minus 2,
+	sub                     // since 2 elements were already computed.
+	pop argument 0          
 label LOOP
-	push argument 0     
-	push local 0
+	push argument 0
+	if-goto COMPUTE_ELEMENT // if n > 0, goto COMPUTE_ELEMENT
+	goto END                // otherwise, goto END
+label COMPUTE_ELEMENT // that[2] = that[0] + that[1]
+	push that 0
+	push that 1
 	add
-	pop local 0	        // sum = sum + n
+	pop that 2 // THAT += 1 (updates the base address of that)
+	push pointer 1
+	push constant 1
+	add
+	pop pointer 1  // updates n-- and loops          
 	push argument 0
 	push constant 1
 	sub
-	pop argument 0      // n--
-	push argument 0
-	if-goto LOOP        // if n > 0, goto LOOP
-	push local 0        // else, pushes sum to the stack's top
-",
+	pop argument 0          
+	goto LOOP
+label END",
     );
 
     match foo {
@@ -136,10 +150,22 @@ fn make_unique_label(label: &str, _unique_label_suffix: &mut usize) -> String {
 }
 
 fn translate(vm_code: &str) -> Result<String, String> {
+    // the assembly we generate uses labels (e.g. lt), so we need to attach a unique
+    // suffix and increment it whenever we make a label to avoid 'collision'
     let mut unique_label_suffix = 0;
+
+    // this is to generate labels that are scoped to a function within a file. (vm) Labels
+    // are only allowed within the context of a function and are scoped to their function.
+    // This means that you can reuse the same label across all function definitions, so
+    // we use the function name (which must be unique) to avoid 'collision'
+    // This variable is updated whenever we 'enter' a function definition
+    let mut current_function_name = "no-function-yet";
 
     Ok(vm_code
         .lines()
+        // TODO - remove comments before parsing, or make 'Comment'
+        // a valid thing to parse, though we don't really do anything
+        // with comments
         .map(parse_one_line)
         .collect::<Result<Vec<Command>, String>>()?
         .iter()
@@ -162,6 +188,7 @@ fn parse_one_line(line: &str) -> Result<Command, String> {
         _parse_command("not", || Command::Not),
         parse_label,
         parse_if_goto,
+        parse_goto,
     ))
     .parse(line)
     .finish()
@@ -275,6 +302,13 @@ fn parse_if_goto(line: &str) -> IResult<&str, Command> {
     Ok((line, Command::IfGoto(label.to_string())))
 }
 
+fn parse_goto(line: &str) -> IResult<&str, Command> {
+    let (line, _) = space0(line)?;
+    let (line, _) = tag("goto ")(line)?;
+    let (line, label) = parse_label_identifier(line)?;
+
+    Ok((line, Command::Goto(label.to_string())))
+}
 const TRUE: &str = "-1";
 const FALSE: &str = "0";
 
@@ -536,6 +570,12 @@ D=!D
     )
 }
 
+fn function_label(label: &String, unique_label_suffix: &mut usize) -> String {
+    let label = make_unique_label(label, unique_label_suffix);
+
+    format!("\n{label}\n")
+}
+
 fn if_goto(label: &String) -> String {
     // We jump to the label if the popped value is
     // less than zero (-1 is TRUE)
@@ -543,6 +583,14 @@ fn if_goto(label: &String) -> String {
         "
         {POP_INTO_D}
         @{label}
-        D;JLT"
+        D;JNE"
+    )
+}
+
+fn goto(label: &String) -> String {
+    format!(
+        "
+        @{label}
+        D;JMP"
     )
 }
